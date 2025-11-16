@@ -387,8 +387,24 @@
                 </div>
             </div>
 
+            <!-- サマリー情報カード -->
+            <div class="card" id="summary-card">
+                <h3 style="margin-bottom: 15px;">📈 サイト概要</h3>
+                <div id="summary-list">
+                    <!-- サマリー情報が動的に追加されます -->
+                </div>
+            </div>
+
+            <!-- 優先対応事項カード -->
+            <div class="card" id="recommendations-card" style="display: none;">
+                <h3 style="margin-bottom: 15px;">🎯 優先的に対応すべき項目</h3>
+                <div id="recommendations-list">
+                    <!-- 推奨事項が動的に追加されます -->
+                </div>
+            </div>
+
             <div class="card">
-                <h3 style="margin-bottom: 15px;">検出された問題</h3>
+                <h3 style="margin-bottom: 15px;">⚠️ 検出された問題 <span id="issue-count" style="background: #ff9800; color: white; padding: 2px 10px; border-radius: 12px; font-size: 14px; margin-left: 10px;">0</span></h3>
                 <div id="issue-list" class="issue-list">
                     <!-- 問題一覧が動的に追加されます -->
                 </div>
@@ -564,8 +580,12 @@
             const issueListDiv = document.getElementById('issue-list');
             issueListDiv.innerHTML = '';
 
+            // 問題数の表示
+            document.getElementById('issue-count').textContent = report.issues.length;
+
             if (report.issues.length === 0) {
-                issueListDiv.innerHTML = '<p style="text-align: center; color: #666;">問題は検出されませんでした！</p>';
+                issueListDiv.innerHTML = '<p style="text-align: center; color: #666;">✅ 問題は検出されませんでした！完璧です！</p>';
+                document.getElementById('issue-count').style.background = '#4caf50';
             } else {
                 // 重要度順にソート
                 const severityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
@@ -585,15 +605,53 @@
                     };
 
                     item.innerHTML = `
-                        <div style="font-size: 12px; color: #888; margin-bottom: 5px;">
-                            ${severityLabels[issue.severity]} | ${issue.category}
+                        <div style="font-size: 12px; color: #888; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>${severityLabels[issue.severity]} | ${issue.category}</span>
+                            <span style="background: rgba(0,0,0,0.05); padding: 2px 8px; border-radius: 12px; font-size: 10px;">-${issue.severity === 'critical' ? '15' : issue.severity === 'high' ? '10' : issue.severity === 'medium' ? '5' : '2'}点</span>
                         </div>
                         <div class="issue-title">${issue.title}</div>
-                        <div class="issue-description">${issue.description}</div>
-                        <div class="issue-fix"><strong>修正方法:</strong> ${issue.fix}</div>
+                        <div class="issue-description" style="margin-bottom: 8px;"><strong>❓ 問題:</strong> ${issue.description}</div>
+                        <div style="background: #fff9e6; padding: 10px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #ff9800;">
+                            <strong>⚠️ ビジネスへの影響:</strong> ${issue.impact}
+                        </div>
+                        <div class="issue-fix"><strong>✅ 修正方法:</strong> ${issue.fix}</div>
+                        ${issue.element ? `<div style="margin-top: 8px; font-size: 12px; color: #666;"><strong>📍 該当箇所:</strong> <code style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px;">${issue.element.substring(0, 100)}...</code></div>` : ''}
                     `;
                     issueListDiv.appendChild(item);
                 });
+            }
+
+            // 推奨事項の表示
+            if (report.recommendations && report.recommendations.length > 0) {
+                const recommendationsDiv = document.getElementById('recommendations-list');
+                recommendationsDiv.innerHTML = '';
+                recommendationsDiv.parentElement.style.display = 'block';
+
+                report.recommendations.forEach((rec, index) => {
+                    const recItem = document.createElement('div');
+                    recItem.style.cssText = 'padding: 12px; background: #f0f9ff; border-left: 4px solid #2196f3; border-radius: 4px; margin-bottom: 10px;';
+                    recItem.innerHTML = `<strong>${index + 1}.</strong> ${rec}`;
+                    recommendationsDiv.appendChild(recItem);
+                });
+            } else {
+                document.getElementById('recommendations-list').parentElement.style.display = 'none';
+            }
+
+            // サマリー情報の表示
+            if (report.summary) {
+                const summaryDiv = document.getElementById('summary-list');
+                summaryDiv.innerHTML = '';
+                summaryDiv.parentElement.style.display = 'block';
+
+                for (const [key, value] of Object.entries(report.summary)) {
+                    const summaryItem = document.createElement('div');
+                    summaryItem.style.cssText = 'display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0;';
+                    summaryItem.innerHTML = `
+                        <span style="color: #666;">${key}</span>
+                        <span style="font-weight: 600; color: #333;">${value}</span>
+                    `;
+                    summaryDiv.appendChild(summaryItem);
+                }
             }
 
             // ダウンロードリンク設定
