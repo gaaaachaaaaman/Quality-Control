@@ -146,7 +146,7 @@ class WebQualityAnalyzer:
     """Webサイト品質分析エンジン"""
 
     def __init__(self, url_or_html: str, is_file: bool = False):
-        self.url = url_or_html if not is_file else "local_file"
+        self.url = url_or_html
         self.is_file = is_file
         self.soup: Optional[BeautifulSoup] = None
         self.issues: List[Issue] = []
