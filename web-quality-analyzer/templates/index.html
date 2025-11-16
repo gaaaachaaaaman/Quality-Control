@@ -360,16 +360,41 @@
             <!-- デザイン比較タブ -->
             <div id="design-tab" class="tab-content">
                 <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
-                    <strong>🚀 世界初！</strong> デザインカンプ（PDF）と実装（HTML）をピクセル単位で自動比較
+                    <strong>🚀 世界初！</strong> デザインカンプ（PDF）と実装をピクセル単位で自動比較
                 </div>
+
+                <!-- 比較方法の選択 -->
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 10px; font-weight: 600; color: #333;">比較方法を選択</label>
+                    <div style="display: flex; gap: 20px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="compare-mode" value="html" checked onchange="toggleCompareMode()">
+                            <span style="margin-left: 8px;">HTMLファイルと比較</span>
+                        </label>
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="radio" name="compare-mode" value="url" onchange="toggleCompareMode()">
+                            <span style="margin-left: 8px;">サイトURLと比較</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div class="input-group">
                     <label for="pdf-input">📄 デザインカンプ（PDF）</label>
                     <input type="file" id="pdf-input" accept=".pdf">
                 </div>
-                <div class="input-group">
+
+                <!-- HTMLファイル入力 -->
+                <div class="input-group" id="html-input-group">
                     <label for="html-input">💻 実装ファイル（HTML）</label>
                     <input type="file" id="html-input" accept=".html,.htm">
                 </div>
+
+                <!-- URL入力 -->
+                <div class="input-group" id="url-input-group" style="display: none;">
+                    <label for="design-url-input">🌐 比較するサイトのURL</label>
+                    <input type="text" id="design-url-input" placeholder="https://example.com">
+                </div>
+
                 <button class="analyze-button" onclick="compareDesign()">🎯 デザイン比較を開始</button>
             </div>
 
@@ -678,21 +703,54 @@
             showResult();
         }
 
+        function toggleCompareMode() {
+            const mode = document.querySelector('input[name="compare-mode"]:checked').value;
+            const htmlInputGroup = document.getElementById('html-input-group');
+            const urlInputGroup = document.getElementById('url-input-group');
+
+            if (mode === 'html') {
+                htmlInputGroup.style.display = 'block';
+                urlInputGroup.style.display = 'none';
+            } else {
+                htmlInputGroup.style.display = 'none';
+                urlInputGroup.style.display = 'block';
+            }
+        }
+
         async function compareDesign() {
             const pdfInput = document.getElementById('pdf-input');
-            const htmlInput = document.getElementById('html-input');
-
             const pdfFile = pdfInput.files[0];
-            const htmlFile = htmlInput.files[0];
 
             if (!pdfFile) {
                 showError('PDFファイル（デザインカンプ）を選択してください');
                 return;
             }
 
-            if (!htmlFile) {
-                showError('HTMLファイル（実装）を選択してください');
-                return;
+            const mode = document.querySelector('input[name="compare-mode"]:checked').value;
+            const formData = new FormData();
+            formData.append('pdf_file', pdfFile);
+
+            let endpoint;
+            if (mode === 'html') {
+                const htmlFile = document.getElementById('html-input').files[0];
+                if (!htmlFile) {
+                    showError('HTMLファイル（実装）を選択してください');
+                    return;
+                }
+                formData.append('html_file', htmlFile);
+                endpoint = '/api/compare-design';
+            } else {
+                const url = document.getElementById('design-url-input').value.trim();
+                if (!url) {
+                    showError('URLを入力してください');
+                    return;
+                }
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    showError('URLは http:// または https:// で始まる必要があります');
+                    return;
+                }
+                formData.append('url', url);
+                endpoint = '/api/compare-design-url';
             }
 
             hideError();
@@ -701,11 +759,7 @@
             document.getElementById('loading').querySelector('p').textContent = 'デザイン比較中...（最大30秒程度かかります）';
 
             try {
-                const formData = new FormData();
-                formData.append('pdf_file', pdfFile);
-                formData.append('html_file', htmlFile);
-
-                const response = await fetch('/api/compare-design', {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     body: formData
                 });
@@ -796,6 +850,93 @@
                     `;
                     issueListDiv.appendChild(item);
                 });
+            }
+
+            // 高度な分析結果カードを追加
+            if (result.section_analyses || result.color_palette_score || result.layout_accuracy || result.css_recommendations) {
+                const advancedAnalysisCard = document.createElement('div');
+                advancedAnalysisCard.className = 'card';
+                let advancedHTML = '<h3 style="margin-bottom: 15px;">🎯 高度なCSS分析結果</h3>';
+
+                // セクション別分析
+                if (result.section_analyses && result.section_analyses.length > 0) {
+                    advancedHTML += '<div style="margin-bottom: 20px;"><h4 style="margin-bottom: 10px; color: #667eea;">📊 セクション別再現率</h4>';
+                    result.section_analyses.forEach(section => {
+                        const barColor = section.similarity_score >= 95 ? '#4caf50' : section.similarity_score >= 90 ? '#667eea' : section.similarity_score >= 80 ? '#ff9800' : '#e53e3e';
+                        advancedHTML += `
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                    <span style="font-weight: 600;">${section.section_name}</span>
+                                    <span style="color: ${barColor}; font-weight: bold;">${section.similarity_score.toFixed(1)}%</span>
+                                </div>
+                                <div style="background: #f0f0f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                                    <div style="background: ${barColor}; height: 100%; width: ${section.similarity_score}%; transition: width 0.3s;"></div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    advancedHTML += '</div>';
+                }
+
+                // カラーパレット・レイアウト精度
+                if (result.color_palette_score !== null || result.layout_accuracy !== null) {
+                    advancedHTML += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">';
+
+                    if (result.color_palette_score !== null) {
+                        const colorScore = result.color_palette_score;
+                        const colorBarColor = colorScore >= 85 ? '#4caf50' : colorScore >= 70 ? '#ff9800' : '#e53e3e';
+                        advancedHTML += `
+                            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🎨 カラーパレット一致度</div>
+                                <div style="font-size: 24px; font-weight: bold; color: ${colorBarColor};">${colorScore.toFixed(1)}%</div>
+                            </div>
+                        `;
+                    }
+
+                    if (result.layout_accuracy !== null) {
+                        const layoutScore = result.layout_accuracy;
+                        const layoutBarColor = layoutScore >= 85 ? '#4caf50' : layoutScore >= 70 ? '#ff9800' : '#e53e3e';
+                        advancedHTML += `
+                            <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📐 レイアウト精度</div>
+                                <div style="font-size: 24px; font-weight: bold; color: ${layoutBarColor};">${layoutScore.toFixed(1)}%</div>
+                            </div>
+                        `;
+                    }
+
+                    advancedHTML += '</div>';
+                }
+
+                // CSS修正提案
+                if (result.css_recommendations && result.css_recommendations.length > 0) {
+                    advancedHTML += '<div style="margin-bottom: 20px;"><h4 style="margin-bottom: 10px; color: #667eea;">💡 具体的なCSS修正提案</h4>';
+                    result.css_recommendations.forEach((rec, index) => {
+                        advancedHTML += `
+                            <div style="background: #fff9e6; padding: 12px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid #ff9800;">
+                                <strong>${index + 1}.</strong> ${rec}
+                            </div>
+                        `;
+                    });
+                    advancedHTML += '</div>';
+                }
+
+                // ヒートマップ
+                if (result.heatmap) {
+                    advancedHTML += `
+                        <div>
+                            <h4 style="margin-bottom: 10px; color: #667eea;">🔥 差分ヒートマップ</h4>
+                            <p style="font-size: 12px; color: #666; margin-bottom: 10px;">青=一致、赤=差分が大きい</p>
+                            <img src="data:image/png;base64,${result.heatmap}" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        </div>
+                    `;
+                }
+
+                advancedAnalysisCard.innerHTML = advancedHTML;
+
+                // 結果カードの後に追加
+                const resultDiv = document.getElementById('result');
+                const issueCard = resultDiv.querySelector('.card:last-child');
+                issueCard.parentNode.insertBefore(advancedAnalysisCard, issueCard);
             }
 
             // 画像比較カードを追加
