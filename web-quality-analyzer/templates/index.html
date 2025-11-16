@@ -336,6 +336,7 @@
             <div class="tab-buttons">
                 <button class="tab-button active" onclick="switchTab('url')">URL分析</button>
                 <button class="tab-button" onclick="switchTab('file')">ファイル分析</button>
+                <button class="tab-button" onclick="switchTab('design')">🎨 デザイン比較</button>
             </div>
 
             <!-- URL分析タブ -->
@@ -354,6 +355,22 @@
                     <input type="file" id="file-input" accept=".html,.htm">
                 </div>
                 <button class="analyze-button" onclick="analyzeFile()">分析開始</button>
+            </div>
+
+            <!-- デザイン比較タブ -->
+            <div id="design-tab" class="tab-content">
+                <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                    <strong>🚀 世界初！</strong> デザインカンプ（PDF）と実装（HTML）をピクセル単位で自動比較
+                </div>
+                <div class="input-group">
+                    <label for="pdf-input">📄 デザインカンプ（PDF）</label>
+                    <input type="file" id="pdf-input" accept=".pdf">
+                </div>
+                <div class="input-group">
+                    <label for="html-input">💻 実装ファイル（HTML）</label>
+                    <input type="file" id="html-input" accept=".html,.htm">
+                </div>
+                <button class="analyze-button" onclick="compareDesign()">🎯 デザイン比較を開始</button>
             </div>
 
             <!-- ローディング表示 -->
@@ -657,6 +674,164 @@
             // ダウンロードリンク設定
             document.getElementById('download-md').href = downloadLinks.markdown;
             document.getElementById('download-json').href = downloadLinks.json;
+
+            showResult();
+        }
+
+        async function compareDesign() {
+            const pdfInput = document.getElementById('pdf-input');
+            const htmlInput = document.getElementById('html-input');
+
+            const pdfFile = pdfInput.files[0];
+            const htmlFile = htmlInput.files[0];
+
+            if (!pdfFile) {
+                showError('PDFファイル（デザインカンプ）を選択してください');
+                return;
+            }
+
+            if (!htmlFile) {
+                showError('HTMLファイル（実装）を選択してください');
+                return;
+            }
+
+            hideError();
+            hideResult();
+            showLoading();
+            document.getElementById('loading').querySelector('p').textContent = 'デザイン比較中...（最大30秒程度かかります）';
+
+            try {
+                const formData = new FormData();
+                formData.append('pdf_file', pdfFile);
+                formData.append('html_file', htmlFile);
+
+                const response = await fetch('/api/compare-design', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayDesignResult(data.result);
+                } else {
+                    showError(data.error || 'デザイン比較に失敗しました');
+                }
+            } catch (error) {
+                showError('サーバーとの通信に失敗しました: ' + error.message);
+            } finally {
+                hideLoading();
+                document.getElementById('loading').querySelector('p').textContent = '分析中...';
+            }
+        }
+
+        function displayDesignResult(result) {
+            // スコア表示
+            const scoreCircle = document.getElementById('score-circle');
+            const scoreText = document.getElementById('score-text');
+            const gradeText = document.getElementById('grade');
+            const totalScoreText = document.getElementById('total-score');
+
+            scoreText.textContent = Math.round(result.similarity_score);
+            gradeText.textContent = result.grade;
+            totalScoreText.textContent = Math.round(result.similarity_score);
+
+            // グレードに応じた色設定
+            scoreCircle.className = 'score-circle score-' + result.grade;
+
+            // カテゴリ別スコアは非表示（デザイン比較では使わない）
+            const categoryScoresDiv = document.getElementById('category-scores');
+            categoryScoresDiv.innerHTML = `
+                <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
+                    <div style="font-size: 14px; color: #666; margin-bottom: 10px;">デザイン再現率</div>
+                    <div style="font-size: 32px; font-weight: bold; color: #667eea;">${result.similarity_score.toFixed(2)}%</div>
+                    <div style="font-size: 12px; color: #888; margin-top: 5px;">差分: ${result.diff_percentage.toFixed(2)}% (${result.pixel_difference.toLocaleString()} / ${result.total_pixels.toLocaleString()} ピクセル)</div>
+                </div>
+            `;
+
+            // サマリーは非表示
+            document.getElementById('summary-card').style.display = 'none';
+
+            // 推奨事項は非表示
+            document.getElementById('recommendations-card').style.display = 'none';
+
+            // 問題一覧表示
+            const issueListDiv = document.getElementById('issue-list');
+            issueListDiv.innerHTML = '';
+
+            // 問題数の表示
+            document.getElementById('issue-count').textContent = result.issues.length;
+
+            if (result.issues.length === 0) {
+                issueListDiv.innerHTML = '<p style="text-align: center; color: #666;">✅ デザインは完璧に再現されています！</p>';
+                document.getElementById('issue-count').style.background = '#4caf50';
+            } else {
+                // 重要度順にソート
+                const severityOrder = { 'critical': 0, 'high': 1, 'medium': 2, 'low': 3 };
+                const sortedIssues = result.issues.sort((a, b) =>
+                    severityOrder[a.severity] - severityOrder[b.severity]
+                );
+
+                sortedIssues.forEach(issue => {
+                    const item = document.createElement('div');
+                    item.className = `issue-item issue-${issue.severity}`;
+
+                    const severityLabels = {
+                        'critical': '🔴 致命的',
+                        'high': '🟠 重要',
+                        'medium': '🟡 中程度',
+                        'low': '🟢 軽微'
+                    };
+
+                    item.innerHTML = `
+                        <div style="font-size: 12px; color: #888; margin-bottom: 8px;">
+                            <span>${severityLabels[issue.severity]} | デザイン品質</span>
+                        </div>
+                        <div class="issue-title">${issue.title}</div>
+                        <div class="issue-description" style="margin-bottom: 8px;"><strong>❓ 問題:</strong> ${issue.description}</div>
+                        <div style="background: #fff9e6; padding: 10px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #ff9800;">
+                            <strong>⚠️ ビジネスへの影響:</strong> ${issue.impact}
+                        </div>
+                        <div class="issue-fix"><strong>✅ 修正方法:</strong> ${issue.fix}</div>
+                    `;
+                    issueListDiv.appendChild(item);
+                });
+            }
+
+            // 画像比較カードを追加
+            const imageComparisonCard = document.createElement('div');
+            imageComparisonCard.className = 'card';
+            imageComparisonCard.innerHTML = `
+                <h3 style="margin-bottom: 15px;">🖼️ 視覚的比較</h3>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #667eea;">📄 デザインカンプ（PDF）</h4>
+                    <img src="data:image/png;base64,${result.design_image}" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #667eea;">💻 実装（ブラウザ表示）</h4>
+                    <img src="data:image/png;base64,${result.browser_image}" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 10px; color: #e53e3e;">🔴 差分検出（赤色 = 違う部分）</h4>
+                    <img src="data:image/png;base64,${result.diff_image}" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                </div>
+
+                <div>
+                    <h4 style="margin-bottom: 10px; color: #ff9800;">🎯 オーバーレイ表示</h4>
+                    <img src="data:image/png;base64,${result.overlay_image}" style="width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                </div>
+            `;
+
+            // 既存の結果カードの後に画像比較カードを追加
+            const resultDiv = document.getElementById('result');
+            const issueCard = resultDiv.querySelector('.card:last-child');
+            issueCard.parentNode.insertBefore(imageComparisonCard, issueCard);
+
+            // ダウンロードボタンは非表示
+            document.querySelectorAll('.download-buttons').forEach(el => el.style.display = 'none');
 
             showResult();
         }

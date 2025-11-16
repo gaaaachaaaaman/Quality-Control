@@ -7,6 +7,7 @@ Web Quality Analyzer Pro - Flask API Server
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
 from analyzer import WebQualityAnalyzer
+from design_comparator import DesignComparator
 import os
 from datetime import datetime
 import tempfile
@@ -232,6 +233,104 @@ def health():
         'status': 'healthy',
         'version': '1.0.0'
     })
+
+
+@app.route('/api/compare-design', methods=['POST'])
+def compare_design():
+    """
+    デザインカンプ(PDF)とHTML実装を比較するエンドポイント
+
+    フォームデータ:
+    - pdf_file: PDFファイル（デザインカンプ）
+    - html_file: HTMLファイル（実装）
+
+    レスポンス:
+    {
+        "success": true,
+        "result": {
+            "similarity_score": 95.5,
+            "grade": "S",
+            "diff_percentage": 4.5,
+            "pixel_difference": 12345,
+            "total_pixels": 2073600,
+            "issues": [...],
+            "diff_image": "base64...",
+            "overlay_image": "base64...",
+            "design_image": "base64...",
+            "browser_image": "base64..."
+        }
+    }
+    """
+    try:
+        # ファイルの確認
+        if 'pdf_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'PDFファイルが指定されていません'
+            }), 400
+
+        if 'html_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'HTMLファイルが指定されていません'
+            }), 400
+
+        pdf_file = request.files['pdf_file']
+        html_file = request.files['html_file']
+
+        if pdf_file.filename == '' or html_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'ファイルが選択されていません'
+            }), 400
+
+        # PDFファイルのチェック
+        if not pdf_file.filename.endswith('.pdf'):
+            return jsonify({
+                'success': False,
+                'error': 'PDFファイル(.pdf)を指定してください'
+            }), 400
+
+        # HTMLファイルのチェック
+        if not html_file.filename.endswith(('.html', '.htm')):
+            return jsonify({
+                'success': False,
+                'error': 'HTMLファイル(.html, .htm)を指定してください'
+            }), 400
+
+        # PDFをバイトデータで読み込み
+        pdf_bytes = pdf_file.read()
+
+        # HTMLを文字列で読み込み
+        html_content = html_file.read().decode('utf-8')
+
+        # デザイン比較実行
+        comparator = DesignComparator()
+        result = comparator.compare_pdf_bytes_with_html(pdf_bytes, html_content)
+
+        # 結果をJSON形式で返す
+        return jsonify({
+            'success': True,
+            'result': {
+                'similarity_score': result.similarity_score,
+                'grade': result.grade,
+                'diff_percentage': result.diff_percentage,
+                'pixel_difference': result.pixel_difference,
+                'total_pixels': result.total_pixels,
+                'issues': result.issues,
+                'diff_image': result.diff_image_base64,
+                'overlay_image': result.overlay_image_base64,
+                'design_image': result.design_image_base64,
+                'browser_image': result.browser_image_base64
+            }
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 if __name__ == '__main__':
