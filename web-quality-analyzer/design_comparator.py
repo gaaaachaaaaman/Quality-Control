@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Design Comparator - デザインカンプとブラウザ表示の比較エンジン
-世界初のピクセル単位デザイン再現性検証ツール
+世界初のピクセル単位デザイン再現性検証ツール + 高度なCSS分析
 """
 
 import os
@@ -27,6 +27,11 @@ try:
 except ImportError:
     webdriver = None
 
+try:
+    from advanced_design_analyzer import AdvancedDesignAnalyzer
+except ImportError:
+    AdvancedDesignAnalyzer = None
+
 
 @dataclass
 class ComparisonResult:
@@ -41,6 +46,12 @@ class ComparisonResult:
     browser_image_base64: str  # ブラウザ画像
     issues: List[Dict]  # 検出された問題点
     grade: str  # S, A, B, C, D
+    # 高度な分析結果
+    section_analyses: Optional[List[Dict]] = None  # セクション別分析
+    color_palette_score: Optional[float] = None  # カラーパレット一致度
+    layout_accuracy: Optional[float] = None  # レイアウト精度
+    css_recommendations: Optional[List[str]] = None  # CSS修正提案
+    heatmap_base64: Optional[str] = None  # ヒートマップ
 
 
 class DesignComparator:
@@ -211,6 +222,52 @@ class DesignComparator:
         # 問題点の検出
         issues = self._detect_issues(diff_percentage, design_np, browser_np)
 
+        # 高度な分析を実行
+        section_analyses = None
+        color_palette_score = None
+        layout_accuracy = None
+        css_recommendations = None
+        heatmap_base64 = None
+
+        if AdvancedDesignAnalyzer is not None:
+            try:
+                advanced_analyzer = AdvancedDesignAnalyzer()
+                advanced_result = advanced_analyzer.analyze_comprehensive(design_img, browser_img)
+
+                # セクション分析を辞書形式に変換
+                section_analyses = [
+                    {
+                        "section_name": section.section_name,
+                        "similarity_score": section.similarity_score,
+                        "issues": section.issues,
+                        "diff_image": section.diff_image_base64
+                    }
+                    for section in advanced_result.section_analyses
+                ]
+
+                color_palette_score = advanced_result.color_analysis.palette_match_score
+                layout_accuracy = advanced_result.layout_analysis.positioning_accuracy
+                css_recommendations = advanced_result.css_recommendations
+                heatmap_base64 = advanced_result.heatmap_base64
+
+                # 高度な分析の問題も追加
+                for section in advanced_result.section_analyses:
+                    issues.extend(section.issues)
+
+                # 重複排除
+                seen = set()
+                unique_issues = []
+                for issue in issues:
+                    issue_key = (issue['title'], issue['severity'])
+                    if issue_key not in seen:
+                        seen.add(issue_key)
+                        unique_issues.append(issue)
+                issues = unique_issues
+
+            except Exception as e:
+                print(f"高度な分析でエラー: {e}")
+                # エラーがあってもメイン機能は動作させる
+
         return ComparisonResult(
             similarity_score=round(similarity_score, 2),
             pixel_difference=int(pixel_difference),
@@ -221,7 +278,12 @@ class DesignComparator:
             design_image_base64=image_to_base64(design_np),
             browser_image_base64=image_to_base64(browser_np),
             issues=issues,
-            grade=grade
+            grade=grade,
+            section_analyses=section_analyses,
+            color_palette_score=color_palette_score,
+            layout_accuracy=layout_accuracy,
+            css_recommendations=css_recommendations,
+            heatmap_base64=heatmap_base64
         )
 
     def _detect_issues(self, diff_percentage: float, design_img: np.ndarray, browser_img: np.ndarray) -> List[Dict]:

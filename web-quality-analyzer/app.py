@@ -309,7 +309,7 @@ def compare_design():
         result = comparator.compare_pdf_bytes_with_html(pdf_bytes, html_content)
 
         # 結果をJSON形式で返す
-        return jsonify({
+        response_data = {
             'success': True,
             'result': {
                 'similarity_score': result.similarity_score,
@@ -321,9 +321,17 @@ def compare_design():
                 'diff_image': result.diff_image_base64,
                 'overlay_image': result.overlay_image_base64,
                 'design_image': result.design_image_base64,
-                'browser_image': result.browser_image_base64
+                'browser_image': result.browser_image_base64,
+                # 高度な分析結果を追加
+                'section_analyses': result.section_analyses,
+                'color_palette_score': result.color_palette_score,
+                'layout_accuracy': result.layout_accuracy,
+                'css_recommendations': result.css_recommendations,
+                'heatmap': result.heatmap_base64
             }
-        })
+        }
+
+        return jsonify(response_data)
 
     except Exception as e:
         traceback.print_exc()
