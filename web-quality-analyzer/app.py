@@ -341,6 +341,115 @@ def compare_design():
         }), 500
 
 
+@app.route('/api/compare-design-url', methods=['POST'])
+def compare_design_url():
+    """
+    デザインカンプ(PDF)と本番サイトのURLを比較するエンドポイント
+
+    フォームデータ:
+    - pdf_file: PDFファイル（デザインカンプ）
+    - url: 比較するサイトのURL
+
+    レスポンス:
+    {
+        "success": true,
+        "result": {全ての分析結果}
+    }
+    """
+    try:
+        # ファイルの確認
+        if 'pdf_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'PDFファイルが指定されていません'
+            }), 400
+
+        # URLの確認
+        data = request.form
+        if 'url' not in data or not data['url']:
+            return jsonify({
+                'success': False,
+                'error': 'URLが指定されていません'
+            }), 400
+
+        pdf_file = request.files['pdf_file']
+        url = data['url']
+
+        if pdf_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'PDFファイルが選択されていません'
+            }), 400
+
+        # PDFファイルのチェック
+        if not pdf_file.filename.endswith('.pdf'):
+            return jsonify({
+                'success': False,
+                'error': 'PDFファイル(.pdf)を指定してください'
+            }), 400
+
+        # URL形式のチェック
+        if not url.startswith(('http://', 'https://')):
+            return jsonify({
+                'success': False,
+                'error': 'URLは http:// または https:// で始まる必要があります'
+            }), 400
+
+        # PDFをバイトデータで読み込み
+        pdf_bytes = pdf_file.read()
+
+        # デザイン比較実行
+        comparator = DesignComparator()
+
+        # PDFを画像に変換
+        design_images = comparator.load_pdf_design_from_bytes(pdf_bytes, dpi=150)
+        if not design_images:
+            return jsonify({
+                'success': False,
+                'error': 'PDFから画像を取得できませんでした'
+            }), 400
+
+        design_img = design_images[0]  # 最初のページ
+
+        # URLからスクリーンショットを取得
+        browser_img = comparator.capture_screenshot(url, width=1920, height=1080)
+
+        # 比較実行
+        result = comparator.compare_images(design_img, browser_img)
+
+        # 結果をJSON形式で返す
+        response_data = {
+            'success': True,
+            'result': {
+                'similarity_score': result.similarity_score,
+                'grade': result.grade,
+                'diff_percentage': result.diff_percentage,
+                'pixel_difference': result.pixel_difference,
+                'total_pixels': result.total_pixels,
+                'issues': result.issues,
+                'diff_image': result.diff_image_base64,
+                'overlay_image': result.overlay_image_base64,
+                'design_image': result.design_image_base64,
+                'browser_image': result.browser_image_base64,
+                # 高度な分析結果
+                'section_analyses': result.section_analyses,
+                'color_palette_score': result.color_palette_score,
+                'layout_accuracy': result.layout_accuracy,
+                'css_recommendations': result.css_recommendations,
+                'heatmap': result.heatmap_base64
+            }
+        }
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
     # 本番環境では適切なWSGIサーバー（gunicorn等）を使用してください
     app.run(host='0.0.0.0', port=5000, debug=False)
