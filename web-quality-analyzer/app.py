@@ -401,8 +401,8 @@ def compare_design_url():
         # デザイン比較実行
         comparator = DesignComparator()
 
-        # PDFを画像に変換
-        design_images = comparator.load_pdf_design_from_bytes(pdf_bytes, dpi=150)
+        # PDFを超高解像度で画像に変換（300 DPI）
+        design_images = comparator.load_pdf_design_from_bytes(pdf_bytes, dpi=300)
         if not design_images:
             return jsonify({
                 'success': False,
@@ -411,8 +411,18 @@ def compare_design_url():
 
         design_img = design_images[0]  # 最初のページ
 
-        # URLからスクリーンショットを取得
-        browser_img = comparator.capture_screenshot(url, width=1920, height=1080)
+        # 天才的アイデア：PDFサイズに基づいてブラウザスクリーンショットサイズを調整
+        # PDFの実際のサイズを取得してブラウザサイズを合わせる
+        pdf_width = design_img.width
+        pdf_height = design_img.height
+
+        # A4サイズ相当のPDFの場合、適切なブラウザサイズに変換
+        # 300DPIでの変換を考慮
+        browser_width = min(pdf_width, 3840)  # 最大4K幅
+        browser_height = min(pdf_height, 2160)  # 最大4K高さ
+
+        # URLからスクリーンショットを取得（PDFサイズに合わせた解像度）
+        browser_img = comparator.capture_screenshot(url, width=browser_width, height=browser_height)
 
         # 比較実行
         result = comparator.compare_images(design_img, browser_img)
