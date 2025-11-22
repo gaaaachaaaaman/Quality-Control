@@ -793,15 +793,43 @@
             // グレードに応じた色設定
             scoreCircle.className = 'score-circle score-' + result.grade;
 
-            // カテゴリ別スコアは非表示（デザイン比較では使わない）
+            // スコア表示（SSIM + Claude Vision統合）
             const categoryScoresDiv = document.getElementById('category-scores');
-            categoryScoresDiv.innerHTML = `
-                <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px;">
-                    <div style="font-size: 14px; color: #666; margin-bottom: 10px;">デザイン再現率</div>
+            let scoresHTML = `
+                <div style="text-align: center; padding: 20px; background: #f5f5f5; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="font-size: 14px; color: #666; margin-bottom: 10px;">🎯 総合デザイン再現率</div>
                     <div style="font-size: 32px; font-weight: bold; color: #667eea;">${result.similarity_score.toFixed(2)}%</div>
                     <div style="font-size: 12px; color: #888; margin-top: 5px;">差分: ${result.diff_percentage.toFixed(2)}% (${result.pixel_difference.toLocaleString()} / ${result.total_pixels.toLocaleString()} ピクセル)</div>
                 </div>
             `;
+
+            // SSIM表示
+            if (result.ssim_score !== null && result.ssim_score !== undefined) {
+                const ssimPercentage = (result.ssim_score * 100).toFixed(2);
+                const ssimColor = result.ssim_score >= 0.95 ? '#4caf50' : result.ssim_score >= 0.85 ? '#667eea' : '#ff9800';
+                scoresHTML += `
+                    <div style="text-align: center; padding: 15px; background: #e3f2fd; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 5px;">📊 SSIM構造的類似度（人間の視覚ベース）</div>
+                        <div style="font-size: 24px; font-weight: bold; color: ${ssimColor};">${ssimPercentage}%</div>
+                        <div style="font-size: 11px; color: #888; margin-top: 3px;">1.0が完全一致</div>
+                    </div>
+                `;
+            }
+
+            // Claude Vision分析サマリー
+            if (result.claude_analysis && result.claude_analysis.overall_match_score) {
+                const claudeScore = result.claude_analysis.overall_match_score;
+                const claudeColor = claudeScore >= 90 ? '#4caf50' : claudeScore >= 75 ? '#667eea' : '#ff9800';
+                scoresHTML += `
+                    <div style="text-align: center; padding: 15px; background: #f3e5f5; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 5px;">🤖 AI総合評価（Claude Vision）</div>
+                        <div style="font-size: 24px; font-weight: bold; color: ${claudeColor};">${claudeScore}/100</div>
+                        <div style="font-size: 11px; color: #888; margin-top: 3px;">${result.claude_analysis.summary || ''}</div>
+                    </div>
+                `;
+            }
+
+            categoryScoresDiv.innerHTML = scoresHTML;
 
             // サマリーは非表示
             document.getElementById('summary-card').style.display = 'none';

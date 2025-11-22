@@ -32,6 +32,16 @@ try:
 except ImportError:
     AdvancedDesignAnalyzer = None
 
+try:
+    from claude_analyzer import ClaudeAnalyzer
+except ImportError:
+    ClaudeAnalyzer = None
+
+try:
+    from skimage.metrics import structural_similarity as ssim
+except ImportError:
+    ssim = None
+
 
 @dataclass
 class ComparisonResult:
@@ -52,6 +62,10 @@ class ComparisonResult:
     layout_accuracy: Optional[float] = None  # レイアウト精度
     css_recommendations: Optional[List[str]] = None  # CSS修正提案
     heatmap_base64: Optional[str] = None  # ヒートマップ
+    # SSIM（構造的類似度）
+    ssim_score: Optional[float] = None  # SSIM類似度（0-1、1が完全一致）
+    # Claude Vision分析結果
+    claude_analysis: Optional[Dict] = None  # Claude Visionによる分析結果
 
 
 class DesignComparator:
@@ -246,6 +260,21 @@ class DesignComparator:
         # グレースケールに変換
         diff_gray = cv2.cvtColor(diff, cv2.COLOR_RGB2GRAY)
 
+        # SSIM（構造的類似度指標）による比較 - 人間の視覚に近い
+        ssim_score = None
+        if ssim is not None:
+            try:
+                design_gray = cv2.cvtColor(design_np, cv2.COLOR_RGB2GRAY)
+                browser_gray = cv2.cvtColor(browser_np, cv2.COLOR_RGB2GRAY)
+                ssim_value, ssim_diff = ssim(design_gray, browser_gray, full=True)
+                ssim_score = ssim_value
+                print(f"  📊 SSIM類似度: {ssim_value:.4f}")
+
+                # SSIM差分マップを追加情報として利用
+                ssim_diff = (ssim_diff * 255).astype("uint8")
+            except Exception as e:
+                print(f"  ⚠️ SSIM計算エラー: {e}")
+
         # 適応的閾値処理で微細な差分も検出（天才的手法）
         # ガウシアンブラーで微小ノイズを除去
         diff_blur = cv2.GaussianBlur(diff_gray, (3, 3), 0)
@@ -259,7 +288,14 @@ class DesignComparator:
         diff_percentage = (pixel_difference / total_pixels) * 100
 
         # 類似度スコア（0-100）
-        similarity_score = max(0, 100 - diff_percentage)
+        # SSIMがある場合はそれも考慮
+        if ssim_score is not None:
+            # SSIM (0-1) を 0-100 に変換して、ピクセル差分と組み合わせる
+            ssim_percentage = ssim_score * 100
+            # 重み付け: SSIM 70%, ピクセル差分 30%
+            similarity_score = ssim_percentage * 0.7 + (100 - diff_percentage) * 0.3
+        else:
+            similarity_score = max(0, 100 - diff_percentage)
 
         # グレード判定
         if similarity_score >= 95:
@@ -336,6 +372,54 @@ class DesignComparator:
                 print(f"高度な分析でエラー: {e}")
                 # エラーがあってもメイン機能は動作させる
 
+        # Claude Vision分析（オプション・最強の武器）
+        claude_analysis = None
+        if ClaudeAnalyzer is not None and os.getenv('ANTHROPIC_API_KEY'):
+            try:
+                claude_analyzer = ClaudeAnalyzer()
+                claude_result = claude_analyzer.analyze(design_np, browser_np)
+                claude_analysis = claude_result
+
+                # Claude分析から問題を追加
+                if 'critical_issues' in claude_result:
+                    for issue in claude_result['critical_issues']:
+                        issues.append({
+                            "severity": "critical",
+                            "title": issue.get('issue', 'Claude検出: 致命的問題'),
+                            "description": issue.get('location', '') + ': ' + issue.get('expected', ''),
+                            "impact": issue.get('impact', ''),
+                            "fix": issue.get('fix', ''),
+                            "category": "AI分析"
+                        })
+
+                if 'high_issues' in claude_result:
+                    for issue in claude_result['high_issues']:
+                        issues.append({
+                            "severity": "high",
+                            "title": issue.get('issue', 'Claude検出: 重要問題'),
+                            "description": issue.get('location', '') + ': ' + issue.get('expected', ''),
+                            "impact": issue.get('impact', ''),
+                            "fix": issue.get('fix', ''),
+                            "category": "AI分析"
+                        })
+
+                # 重複排除（再度）
+                seen = set()
+                unique_issues = []
+                for issue in issues:
+                    issue_key = (issue['title'], issue['severity'])
+                    if issue_key not in seen:
+                        seen.add(issue_key)
+                        unique_issues.append(issue)
+                issues = unique_issues
+
+                print(f"  🤖 Claude総合スコア: {claude_result.get('overall_match_score', 'N/A')}")
+
+            except Exception as e:
+                print(f"  ⚠️ Claude Vision分析でエラー: {e}")
+                print("     （ANTHROPIC_API_KEYが設定されているか確認してください）")
+                # エラーがあってもメイン機能は動作させる
+
         return ComparisonResult(
             similarity_score=round(similarity_score, 2),
             pixel_difference=int(pixel_difference),
@@ -351,7 +435,9 @@ class DesignComparator:
             color_palette_score=color_palette_score,
             layout_accuracy=layout_accuracy,
             css_recommendations=css_recommendations,
-            heatmap_base64=heatmap_base64
+            heatmap_base64=heatmap_base64,
+            ssim_score=ssim_score,
+            claude_analysis=claude_analysis
         )
 
     def _detect_issues(self, diff_percentage: float, design_img: np.ndarray, browser_img: np.ndarray) -> List[Dict]:

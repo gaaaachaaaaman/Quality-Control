@@ -322,12 +322,15 @@ def compare_design():
                 'overlay_image': result.overlay_image_base64,
                 'design_image': result.design_image_base64,
                 'browser_image': result.browser_image_base64,
-                # 高度な分析結果を追加
+                # 高度な分析結果
                 'section_analyses': result.section_analyses,
                 'color_palette_score': result.color_palette_score,
                 'layout_accuracy': result.layout_accuracy,
                 'css_recommendations': result.css_recommendations,
-                'heatmap': result.heatmap_base64
+                'heatmap': result.heatmap_base64,
+                # SSIM + Claude Vision分析
+                'ssim_score': result.ssim_score,
+                'claude_analysis': result.claude_analysis
             }
         }
 
@@ -446,7 +449,10 @@ def compare_design_url():
                 'color_palette_score': result.color_palette_score,
                 'layout_accuracy': result.layout_accuracy,
                 'css_recommendations': result.css_recommendations,
-                'heatmap': result.heatmap_base64
+                'heatmap': result.heatmap_base64,
+                # SSIM + Claude Vision分析
+                'ssim_score': result.ssim_score,
+                'claude_analysis': result.claude_analysis
             }
         }
 
